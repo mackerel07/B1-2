@@ -1,4 +1,4 @@
-```text
+```ini
 # 1. root 계정에서 agent-admin 계정으로 전환
 su - agent-admin
 
