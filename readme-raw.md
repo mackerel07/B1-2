@@ -1,6 +1,3 @@
-# Raw Logs and Commands (# 1.ini)
-
-```text
 # 1. root 계정에서 agent-admin 계정으로 전환
 su - agent-admin
 
@@ -294,4 +291,3 @@ def start_deadlock_test():
 if __name__ == "__main__":
     start_deadlock_test()
 EOF
-```
