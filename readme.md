@@ -69,7 +69,7 @@ Terminated
 - **Before & After 비교 결과:**
   - **Before:** `CPU_MAX_OCCUPY=80`일 때, 약 5초 경과 후 Watchdog에 의해 강제 종료됨.
   - **After:** `CPU_MAX_OCCUPY=100`으로 상향 후, 종료되지 않고 15초 이상 생존 기간이 연장됨을 확인.
-- **추가 제안:** CPU 한도를 높이는 것은 임시방편입니다. 근본적 해결을 위해서는 코드 내 복잡한 연산 사이에 `time.sleep()`을 주어 자원을 양보(Yield)하거나, 연산을 분산 처리(Message Queue 활용 등)하도록 아키텍처를 개선해야 합니다.
+- **추가 제안:** CPU 한도를 높이는 것은 임시방편입니다. 근본적 해결을 위해서는 코드 내 복잡한 연산 사이에 `time.sleep()`을 주어 자원을 양보(Yield)하거나, 연산을 분산 처리하도록 아키텍처를 개선해야 합니다.
 
 ---
 
@@ -106,3 +106,206 @@ root       13959   13949  0 19:34 pts/4    00:00:00 grep --color=auto agent
   - **Before (true):** 로그 출력이 멈추고 PID만 살아있는 데드락 발생
   - **After (false):** 교착상태 없이 `[INFO] 모든 작업이 정상적으로 완료되었습니다.` 메시지와 함께 프로세스 정상 종료 확인
 - **추가 제안:** 멀티스레딩의 성능 이점을 살리면서 데드락을 방지하려면, 모든 스레드가 동일한 순서(예: 항상 자원 A 획득 후 자원 B 획득)로 락(Lock)을 요청하도록 코드를 수정해야 합니다.
+
+# 실제 agent-app-leak 실행 로그
+
+```bash
+agent-admin@9ad47e242836:~$ ./agent-app-leak 
+>>> Starting Agent Boot Sequence...
+[1/6] Checking User Account               [OK]
+   ... Running as service user 'agent-admin' (uid=1000)
+[2/6] Verifying Environment Variables     [OK]
+   ... All required Envs correct
+[3/6] Checking Required Files             [OK]
+   ... Verified 'secret.key' with correct key string.
+[4/6] Checking Port Availability          [OK]
+   ... Port 15034 is available.
+[5/6] Verifying Log Permission            [OK]
+   ... Log directory is writable: /home/agent-admin/agent-app/logs
+[6/6] Verifying Mission Environment       [OK]
+   ... MEMORY_LIMIT=256MB, CPU_MAX_OCCUPY=80%, MULTI_THREAD_ENABLE=True
+------------------------------------------------------------
+All Boot Checks Passed!
+Agent READY
+2026-05-14 03:15:34,190 [INFO] [SafetyGuard] Process priority lowered (nice=10).
+2026-05-14 03:15:34,191 [INFO] Agent listening at port 15034
+
+==================================================
+ [ Agent Initiate ] Resource Check 
+==================================================
+ [ MEMORY ] Limit: 256MB 		[ WARNING: Recommend Over 256MB ]
+ [ CPU    ] Limit: 80%  		[ WARNING: Recommend Under 50% ]
+ [ THREAD ] Concurrency: True 		[ WARNING ]
+--------------------------------------------------
+ >>> SYSTEM WARNING: POTENTIAL DEADLOCK IN CONCURRENT MODE.
+==================================================
+
+2026-05-14 03:15:36,209 [INFO] [MemoryWorker] Current Heap: 25MB
+2026-05-14 03:15:39,230 [INFO] [MemoryWorker] Current Heap: 50MB
+2026-05-14 03:15:42,249 [INFO] [MemoryWorker] Current Heap: 75MB
+2026-05-14 03:15:45,274 [INFO] [MemoryWorker] Current Heap: 100MB
+2026-05-14 03:15:48,294 [INFO] [MemoryWorker] Current Heap: 125MB
+2026-05-14 03:15:51,319 [INFO] [MemoryWorker] Current Heap: 150MB
+2026-05-14 03:15:54,342 [INFO] [MemoryWorker] Current Heap: 175MB
+2026-05-14 03:15:57,365 [INFO] [MemoryWorker] Current Heap: 200MB
+2026-05-14 03:16:00,388 [INFO] [MemoryWorker] Current Heap: 225MB
+2026-05-14 03:16:03,405 [INFO] [MemoryWorker] Current Heap: 250MB
+2026-05-14 03:16:06,424 [INFO] [MemoryWorker] Current Heap: 275MB
+2026-05-14 03:16:06,424 [CRITICAL] [MemoryGuard] Memory limit exceeded (275MB >= 256MB) / (Recommend Over 256MB)
+2026-05-14 03:16:06,425 [CRITICAL] [MemoryGuard] Self-terminating process 69 to prevent system instability.
+
+
+>>> [SYSTEM] SELF-TERMINATED (Memory Limit Exceeded) <<<
+
+Killed
+```
+
+```bash
+# export MEMORY_LIMIT=512
+
+==================================================
+ [ Agent Initiate ] Resource Check 
+==================================================
+ [ MEMORY ] Limit: 512MB 		[ OK ]
+ [ CPU    ] Limit: 80%  		[ WARNING: Recommend Under 50% ]
+ [ THREAD ] Concurrency: True 		[ WARNING ]
+--------------------------------------------------
+ >>> SYSTEM WARNING: POTENTIAL DEADLOCK IN CONCURRENT MODE.
+==================================================
+
+2026-05-14 03:23:08,848 [INFO] [CpuWorker] Started. Maximum CPU Limit: 80%
+2026-05-14 03:23:08,852 [INFO] [CpuWorker] Current Load: 5.00%
+2026-05-14 03:23:11,965 [INFO] [CpuWorker] Current Load: 9.96%
+2026-05-14 03:23:15,079 [INFO] [CpuWorker] Current Load: 12.54%
+2026-05-14 03:23:18,197 [INFO] [CpuWorker] Current Load: 21.03%
+2026-05-14 03:23:21,301 [INFO] [CpuWorker] Current Load: 22.34%
+2026-05-14 03:23:24,414 [INFO] [CpuWorker] Current Load: 30.54%
+2026-05-14 03:23:27,521 [INFO] [CpuWorker] Current Load: 38.01%
+2026-05-14 03:23:30,633 [INFO] [CpuWorker] Current Load: 40.29%
+2026-05-14 03:23:33,745 [INFO] [CpuWorker] Current Load: 49.06%
+2026-05-14 03:23:36,854 [INFO] [CpuWorker] Current Load: 50.60%
+2026-05-14 03:23:36,961 [CRITICAL] [CpuWorker] CPU Threshold Violated! (50.6%).
+
+>>> [SYSTEM] WATCHDOG: INITIATING EMERGENCY ABORT (SIGTERM) <<<
+
+Terminated
+```
+
+<img width="1517" height="726" alt="Image" src="https://github.com/user-attachments/assets/e47488f6-b364-4220-9094-dbda3534911c" />
+
+```bash
+# export CPU_MAX_OCCUPY=100
+
+===================================================
+ [ Agent Initiate ] Resource Check 
+==================================================
+ [ MEMORY ] Limit: 512MB 		[ OK ]
+ [ CPU    ] Limit: 100%  		[ WARNING: Recommend Under 50% ]
+ [ THREAD ] Concurrency: True 		[ WARNING ]
+--------------------------------------------------
+ >>> SYSTEM WARNING: POTENTIAL DEADLOCK IN CONCURRENT MODE.
+==================================================
+
+2026-05-14 03:49:58,088 [INFO] [CpuWorker] Started. Maximum CPU Limit: 100%
+2026-05-14 03:49:58,093 [INFO] [CpuWorker] Current Load: 5.00%
+2026-05-14 03:50:01,211 [INFO] [CpuWorker] Current Load: 8.19%
+2026-05-14 03:50:04,324 [INFO] [CpuWorker] Current Load: 17.51%
+2026-05-14 03:50:07,436 [INFO] [CpuWorker] Current Load: 18.82%
+2026-05-14 03:50:10,552 [INFO] [CpuWorker] Current Load: 28.77%
+2026-05-14 03:50:13,668 [INFO] [CpuWorker] Current Load: 37.99%
+2026-05-14 03:50:16,779 [INFO] [CpuWorker] Current Load: 40.95%
+2026-05-14 03:50:19,888 [INFO] [CpuWorker] Current Load: 41.60%
+2026-05-14 03:50:23,003 [INFO] [CpuWorker] Current Load: 45.87%
+2026-05-14 03:50:26,118 [INFO] [CpuWorker] Current Load: 49.61%
+2026-05-14 03:50:29,230 [INFO] [CpuWorker] Current Load: 51.44%
+2026-05-14 03:50:29,338 [CRITICAL] [CpuWorker] CPU Threshold Violated! (51.43999999999999%).
+
+>>> [SYSTEM] WATCHDOG: INITIATING EMERGENCY ABORT (SIGTERM) <<<
+```
+
+```bash
+# export CPU_MAX_OCCUPY=10
+
+==================================================
+ [ Agent Initiate ] Resource Check 
+==================================================
+ [ MEMORY ] Limit: 512MB 		[ OK ]
+ [ CPU    ] Limit: 10%  		[ OK ]
+ [ THREAD ] Concurrency: True 		[ WARNING ]
+--------------------------------------------------
+ >>> SYSTEM WARNING: POTENTIAL DEADLOCK IN CONCURRENT MODE.
+==================================================
+
+2026-05-14 03:52:10,647 [WARNING] [AgentWorker] Initializing concurrent transaction processors...
+2026-05-14 03:52:10,648 [WARNING] [System] CAUTION: Strict resource locking is enabled.
+2026-05-14 03:52:15,656 [INFO] [Worker-Thread-1] Process Started. Attempting to lock [Shared_Memory_A]...
+2026-05-14 03:52:15,657 [INFO] [AgentWorker][Worker-Thread-1] LOCK ACQUIRED: [Shared_Memory_A]. (Holding...)
+2026-05-14 03:52:15,657 [INFO] [AgentWorker][Worker-Thread-2] Process Started. Attempting to lock [Socket_Pool_B]...
+2026-05-14 03:52:15,658 [INFO] [AgentWorker][Worker-Thread-1] Processing critical data in Memory A...
+2026-05-14 03:52:15,658 [INFO] [AgentWorker][Worker-Thread-2] LOCK ACQUIRED: [Socket_Pool_B]. (Holding...)
+2026-05-14 03:52:15,658 [INFO] [AgentWorker] Waiting for worker threads to complete transactions...
+2026-05-14 03:52:15,659 [INFO] [AgentWorker][Worker-Thread-2] Establishing network connections in Pool B...
+2026-05-14 03:52:17,664 [INFO] [AgentWorker][Worker-Thread-2] Need resource [Shared_Memory_A] to write logs.
+2026-05-14 03:52:17,664 [INFO] [AgentWorker][Worker-Thread-1] Need resource [Socket_Pool_B] to finish job.
+2026-05-14 03:52:17,665 [INFO] [AgentWorker][Worker-Thread-2] WAITING for [Shared_Memory_A]... (Status: BLOCKED)
+2026-05-14 03:52:17,666 [INFO] [AgentWorker][Worker-Thread-1] WAITING for [Socket_Pool_B]... (Status: BLOCKED)
+```
+
+```bash
+# export MULTI_THREAD_ENABLE=false
+==================================================
+ [ Agent Initiate ] Resource Check 
+==================================================
+ [ MEMORY ] Limit: 512MB 		[ OK ]
+ [ CPU    ] Limit: 10%  		[ OK ]
+ [ THREAD ] Concurrency: False 		[ OK ]
+--------------------------------------------------
+ >>> SYSTEM STATUS: STABLE. STARTING WORKLOAD MONITORING...
+==================================================
+
+2026-05-14 03:54:41,605 [INFO] >>> Scenario Selected: [Healthy System Monitoring]
+
+>>> [SYSTEM] ALL CONFIGURATIONS OPTIMAL. RUNNING STABILITY TEST... <<<
+
+2026-05-14 03:54:41,611 [INFO] [Scheduler] Task Scheduler Initialized.
+2026-05-14 03:54:41,611 [INFO] [Scheduler] Registered Tasks: ['Thread-A', 'Thread-B', 'Thread-C']
+2026-05-14 03:54:41,612 [INFO] [Scheduler] Starting task execution...
+2026-05-14 03:54:41,612 [INFO] [Thread-A] Task Started. Calculating... (20%)
+2026-05-14 03:54:41,668 [INFO] [Thread-A] Calculating... (40%)
+2026-05-14 03:54:41,720 [INFO] [Thread-A] Preempted. Progress saved at (40%)
+2026-05-14 03:54:41,776 [INFO] [Thread-B] Task Started. Calculating... (20%)
+2026-05-14 03:54:41,830 [INFO] [Thread-B] Calculating... (40%)
+2026-05-14 03:54:41,886 [INFO] [Thread-B] Preempted. Progress saved at (40%)
+2026-05-14 03:54:41,942 [INFO] [Thread-C] Task Started. Calculating... (20%)
+2026-05-14 03:54:41,995 [INFO] [Thread-C] Calculating... (40%)
+2026-05-14 03:54:42,047 [INFO] [Thread-C] Preempted. Progress saved at (40%)
+2026-05-14 03:54:42,102 [INFO] [Thread-A] Resumed. Calculating... (60%)
+2026-05-14 03:54:42,156 [INFO] [Thread-A] Calculating... (80%)
+2026-05-14 03:54:42,212 [INFO] [Thread-A] Preempted. Progress saved at (80%)
+2026-05-14 03:54:42,265 [INFO] [Thread-B] Resumed. Calculating... (60%)
+2026-05-14 03:54:42,320 [INFO] [Thread-B] Calculating... (80%)
+2026-05-14 03:54:42,372 [INFO] [Thread-B] Preempted. Progress saved at (80%)
+2026-05-14 03:54:42,424 [INFO] [Thread-C] Resumed. Calculating... (60%)
+2026-05-14 03:54:42,480 [INFO] [Thread-C] Calculating... (80%)
+2026-05-14 03:54:42,532 [INFO] [Thread-C] Preempted. Progress saved at (80%)
+2026-05-14 03:54:42,586 [INFO] [Thread-A] Resumed. Calculating... (100%)
+2026-05-14 03:54:42,643 [INFO] [Thread-B] Resumed. Calculating... (100%)
+2026-05-14 03:54:42,695 [INFO] [Thread-C] Resumed. Calculating... (100%)
+2026-05-14 03:54:42,751 [INFO] [Scheduler] All tasks completed.
+2026-05-14 03:54:42,771 [INFO] [MemoryWorker] Current Heap: 25MB
+2026-05-14 03:54:42,771 [INFO] [CpuWorker] Started. Maximum CPU Limit: 10%
+2026-05-14 03:54:42,773 [INFO] [CpuWorker] Current Load: 5.00%
+2026-05-14 03:54:44,886 [INFO] [CpuWorker] Peak reached (10.00%). Starting cooldown...
+2026-05-14 03:54:45,792 [INFO] [MemoryWorker] Current Heap: 50MB
+2026-05-14 03:54:45,891 [INFO] [CpuWorker] Current Load: 10.00%
+2026-05-14 03:54:48,001 [INFO] [CpuWorker] Cooldown complete (5.00%). Resuming load increase...
+2026-05-14 03:54:48,816 [INFO] [MemoryWorker] Current Heap: 75MB
+2026-05-14 03:54:49,007 [INFO] [CpuWorker] Current Load: 5.00%
+...
+2026-05-14 03:55:43,181 [WARNING] [MemoryWorker] Memory Usage Reached Limit (525MB). Starting cleanup...
+2026-05-14 03:55:43,203 [INFO] [System] Memory Cache Flushed. Process Stabilized.
+
+>>> [SYSTEM] MEMORY RECOVERED (Cache Cleared) <<<
+```
+
+# 정상적으로 패스가 된 것을 확인할 수 있음
